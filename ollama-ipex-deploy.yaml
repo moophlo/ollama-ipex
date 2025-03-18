@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/instance: ollama-ipex
+    app.kubernetes.io/name: ollama-ipex
+  name: ollama-ipex
+  namespace: default
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 0
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: ollama-ipex
+      app.kubernetes.io/name: ollama-ipex
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: ollama-ipex
+        app.kubernetes.io/name: ollama-ipex
+      namespace: default
+    spec:
+      containers:
+      - env:
+        - name: OLLAMA_KEEP_ALIVE
+          value: 30m
+        - name: DEFAULT_REQUEST_TIMEOUT
+          value: "240"
+        - name: OLLAMA_HOST
+          value: 0.0.0.0
+        - name: HOME
+          value: /home/ollama/models
+        - name: ZES_ENABLE_SYSMAN
+          value: "1"
+        - name: DEVICE
+          value: "iGPU"
+        - name: OLLAMA_INTEL_GPU
+          value: "1"
+        - name: GIN_MODE
+          value: "release"
+        image: moophlo/ollama-ipex:latest
+        imagePullPolicy: IfNotPresent
+        name: ollama-ipex
+        ports:
+        - containerPort: 11434
+          name: http
+          protocol: TCP
+        resources:
+          limits:
+            gpu.intel.com/i915: 1
+        securityContext:
+          allowPrivilegeEscalation: true
+          capabilities:
+            add:
+            - SYS_TRACE
+          privileged: true
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+        stdin: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        tty: true
+        volumeMounts:
+        - mountPath: /root/.ollama
+          name: ollama-data
+        - mountPath: /home/ollama/models
+          name: pv-ollama-home-ipex
+      dnsPolicy: ClusterFirst
+      hostNetwork: true
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      tolerations:
+      - effect: NoSchedule
+        key: gpu
+        operator: Equal
+        value: "true"
+      volumes:
+      - emptyDir: {}
+        name: ollama-data
+      - name: pv-ollama-home-ipex
+        persistentVolumeClaim:
+          claimName: pv-ollama-home-ipex
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: llm
+  name: pv-ollama-home-ipex
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-ollama-home-ipex
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 100Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/media/muflo/Volume10TB/ollama-ipex"
